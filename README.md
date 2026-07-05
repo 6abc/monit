@@ -1,4 +1,4 @@
-# Meraki Monitoring Stack — 192.168.1.203
+# Monitoring Stack — 192.168.1.203
 
 Prometheus + Alertmanager + Loki/Promtail + Grafana, deployed via Docker
 Compose on Debian 13 (Trixie), with all persistent data under
