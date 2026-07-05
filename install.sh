@@ -24,6 +24,7 @@ mkdir -p grafana/provisioning/dashboards/files
 echo "==> Setting ownership to match container UIDs"
 # Prometheus & Alertmanager run as nobody:nogroup (65534:65534)
 sudo chown -R 65534:65534 data/prometheus data/alertmanager
+sudo chown 65534:65534 alertmanager/alertmanager.yml
 # Loki runs as uid 10001
 sudo chown -R 10001:10001 data/loki
 # Grafana runs as uid 472
