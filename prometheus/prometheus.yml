@@ -1,0 +1,76 @@
+# prometheus.yml
+#
+# ASSUMPTION: the remote targets below (192.168.1.201 = DB/Redis server,
+# 192.168.1.202 = app server) are based on the 3-server topology from your
+# earlier Meraki deployment work. Adjust IPs/ports if that's changed, and
+# make sure node_exporter / nginx-exporter / postgres_exporter / promtail
+# are actually installed and listening on those hosts before you start
+# this stack, or those targets will just show as "down" (which is harmless
+# but noisy).
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    monitor: 'meraki-monitoring'
+    environment: 'production'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+
+  - job_name: 'node-exporter-local'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          host: 'monitoring'
+          role: 'monitoring'
+
+  # --- Remote log-shipping agents (metrics endpoint, not the log stream) ---
+  - job_name: 'promtail'
+    static_configs:
+      - targets: ['promtail:9080']
+        labels: { host: 'monitoring', role: 'monitoring' }
+      - targets: ['192.168.1.201:9080']
+        labels: { host: 'db-redis', role: 'database' }
+      - targets: ['192.168.1.202:9080']
+        labels: { host: 'app', role: 'application' }
+
+  # --- Remote host metrics ---
+  - job_name: 'node-exporter-remote'
+    static_configs:
+      - targets: ['192.168.1.201:9100']
+        labels: { host: 'db-redis', role: 'database' }
+      - targets: ['192.168.1.202:9100']
+        labels: { host: 'app', role: 'application' }
+
+  # --- Nginx (app server) ---
+  - job_name: 'nginx-exporter'
+    static_configs:
+      - targets: ['192.168.1.202:9113']
+        labels: { host: 'app', role: 'application' }
+
+  # --- PostgreSQL (db server) ---
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['192.168.1.201:9187']
+        labels: { host: 'db-redis', role: 'database' }

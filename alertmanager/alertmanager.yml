@@ -1,0 +1,51 @@
+# alertmanager.yml
+#
+# IMPORTANT: Alertmanager does NOT expand ${VARIABLES} from .env - that only
+# works for docker-compose.yml. Fill in real values directly below, then:
+#   chmod 600 alertmanager/alertmanager.yml
+# and make sure this file is excluded from git (add it to .gitignore) since
+# it will contain real credentials once filled in.
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'alertmanager@merakirehabcare.com'
+  smtp_auth_username: 'CHANGE_ME'
+  smtp_auth_password: 'CHANGE_ME'
+  smtp_require_tls: true
+
+route:
+  receiver: 'default-email'
+  group_by: ['alertname', 'host']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity="critical"
+      receiver: 'critical-email'
+      repeat_interval: 1h
+
+receivers:
+  - name: 'default-email'
+    email_configs:
+      - to: 'ash@merakirehabcare.com'
+        send_resolved: true
+
+  - name: 'critical-email'
+    email_configs:
+      - to: 'ash@merakirehabcare.com'
+        send_resolved: true
+    # Optional: add a webhook here too for faster critical notification,
+    # e.g. a Slack incoming webhook or ntfy.sh topic:
+    # webhook_configs:
+    #   - url: 'https://ntfy.sh/your-private-topic'
+    #     send_resolved: true
+
+inhibit_rules:
+  # Don't page for every resource alert on a host that's already fully down.
+  - source_matchers:
+      - alertname="TargetDown"
+    target_matchers:
+      - severity=~"warning|critical"
+    equal: ['host']

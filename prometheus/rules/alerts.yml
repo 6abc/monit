@@ -1,0 +1,77 @@
+groups:
+
+  - name: availability
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} on {{ $labels.instance }} is unreachable"
+          impact: "Metrics/logs for this host or service have stopped. Related dashboards will show gaps and dependent alerts may go blind."
+          likely_cause: "Host down, container stopped, network/firewall change, or exporter crashed."
+          action: "SSH to {{ $labels.host }} and check: systemctl status <exporter>, docker ps, and network reachability from the monitoring server (192.168.1.203)."
+          severity_note: "critical"
+
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus config reload failed"
+          impact: "Prometheus is running on a stale config; recent scrape/rule changes are not applied."
+          likely_cause: "Syntax error in prometheus.yml or a rules file."
+          action: "docker logs prometheus, then validate with: docker exec prometheus promtool check config /etc/prometheus/prometheus.yml"
+          severity_note: "warning"
+
+  - name: host-resources
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          impact: "Sustained high CPU can slow request processing across services on this host."
+          likely_cause: "Traffic spike, runaway process, or undersized instance."
+          action: "top / htop on the host, check for a single process pinning a core, review recent deploys."
+          severity_note: "warning"
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          impact: "Host is close to OOM; the kernel may start killing processes (check dmesg for oom-killer)."
+          likely_cause: "Memory leak, undersized container limits, or a growth in working set (e.g. Postgres cache, Gunicorn workers)."
+          action: "free -h on the host, docker stats for per-container usage, check for recent traffic/data growth."
+          severity_note: "warning"
+
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 15
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }} ({{ $labels.mountpoint }})"
+          impact: "Below 15% free. If this hits 0%, Postgres/Docker/logging can fail outright."
+          likely_cause: "Log growth, unpruned Docker images/volumes, Postgres WAL buildup, or Prometheus/Loki retention set too long for available disk."
+          action: "df -h, du -sh /var/lib/docker, docker system prune, check pg_dump backup rotation isn't piling up."
+          severity_note: "warning"
+
+      - alert: LowDiskSpaceCritical
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critically low disk space on {{ $labels.instance }} ({{ $labels.mountpoint }})"
+          impact: "Imminent write failures for the database, application logs, or this monitoring stack's own storage."
+          likely_cause: "Same as LowDiskSpace but now urgent."
+          action: "Free space immediately: prune Docker, rotate/compress logs, or expand the volume."
+          severity_note: "critical"
